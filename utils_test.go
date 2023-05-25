@@ -1,9 +1,10 @@
-package gormbulk
+package gormcreatewoi
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_splitObjects(t *testing.T) {

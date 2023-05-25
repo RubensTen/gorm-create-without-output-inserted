@@ -1,8 +1,7 @@
 /*
-Package gormbulk provides a bulk-insert method using a DB instance of gorm.
-This aims to shorten the overhead caused by inserting a large number of records.
+Package gormcreatewoi provides a insert method using a DB instance of gorm without add the OUTPUT Inserted clausule.
 */
-package gormbulk
+package gormcreatewoi
 
 import (
 	"errors"
@@ -22,22 +21,20 @@ import (
 // and exceeds the limit of prepared statement. Larger size normally leads to better performance, in most cases 2000 to 3000 is reasonable.
 //
 // [excludeColumns] is column names to exclude from insert.
-func BulkInsert(db *gorm.DB, objects []interface{}, chunkSize int, excludeColumns ...string) error {
+func InsertWOI(db *gorm.DB, objects interface{}, excludeColumns ...string) error {
 	// Split records with specified size not to exceed Database parameter limit
-	for _, objSet := range splitObjects(objects, chunkSize) {
-		if err := insertObjSet(db, objSet, excludeColumns...); err != nil {
-			return err
-		}
+	if err := insertObjSet(db, objects, excludeColumns...); err != nil {
+		return err
 	}
 	return nil
 }
 
-func insertObjSet(db *gorm.DB, objects []interface{}, excludeColumns ...string) error {
-	if len(objects) == 0 {
+func insertObjSet(db *gorm.DB, objects interface{}, excludeColumns ...string) error {
+	if objects == nil {
 		return nil
 	}
 
-	firstAttrs, err := extractMapValue(objects[0], excludeColumns)
+	firstAttrs, err := extractMapValue(objects, excludeColumns)
 	if err != nil {
 		return err
 	}
@@ -45,7 +42,7 @@ func insertObjSet(db *gorm.DB, objects []interface{}, excludeColumns ...string) 
 	attrSize := len(firstAttrs)
 
 	// Scope to eventually run SQL
-	mainScope := db.NewScope(objects[0])
+	mainScope := db.NewScope(objects)
 	// Store placeholders for embedding variables
 	placeholders := make([]string, 0, attrSize)
 
@@ -55,32 +52,32 @@ func insertObjSet(db *gorm.DB, objects []interface{}, excludeColumns ...string) 
 		dbColumns = append(dbColumns, mainScope.Quote(key))
 	}
 
-	for _, obj := range objects {
-		objAttrs, err := extractMapValue(obj, excludeColumns)
-		if err != nil {
-			return err
-		}
-
-		// If object sizes are different, SQL statement loses consistency
-		if len(objAttrs) != attrSize {
-			return errors.New("attribute sizes are inconsistent")
-		}
-
-		scope := db.NewScope(obj)
-
-		// Append variables
-		variables := make([]string, 0, attrSize)
-		for _, key := range sortedKeys(objAttrs) {
-			scope.AddToVars(objAttrs[key])
-			variables = append(variables, "?")
-		}
-
-		valueQuery := "(" + strings.Join(variables, ", ") + ")"
-		placeholders = append(placeholders, valueQuery)
-
-		// Also append variables to mainScope
-		mainScope.SQLVars = append(mainScope.SQLVars, scope.SQLVars...)
+	//for _, obj := range objects {
+	objAttrs, err := extractMapValue(objects, excludeColumns)
+	if err != nil {
+		return err
 	}
+
+	// If object sizes are different, SQL statement loses consistency
+	if len(objAttrs) != attrSize {
+		return errors.New("attribute sizes are inconsistent")
+	}
+
+	scope := db.NewScope(objects)
+
+	// Append variables
+	variables := make([]string, 0, attrSize)
+	for _, key := range sortedKeys(objAttrs) {
+		scope.AddToVars(objAttrs[key])
+		variables = append(variables, "?")
+	}
+
+	valueQuery := "(" + strings.Join(variables, ", ") + ")"
+	placeholders = append(placeholders, valueQuery)
+
+	// Also append variables to mainScope
+	mainScope.SQLVars = append(mainScope.SQLVars, scope.SQLVars...)
+	//}
 
 	insertOption := ""
 	if val, ok := db.Get("gorm:insert_option"); ok {
@@ -91,14 +88,15 @@ func insertObjSet(db *gorm.DB, objects []interface{}, excludeColumns ...string) 
 		insertOption = strVal
 	}
 
-	mainScope.Raw(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s %s",
+	mainScope.Raw(fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES %s %s",
 		mainScope.QuotedTableName(),
 		strings.Join(dbColumns, ", "),
 		strings.Join(placeholders, ", "),
 		insertOption,
 	))
 
-	return db.Exec(mainScope.SQL, mainScope.SQLVars...).Error
+	return db.Debug().Exec(mainScope.SQL, mainScope.SQLVars...).Error
 }
 
 // Obtain columns and values required for insert from interface

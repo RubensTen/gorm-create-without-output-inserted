@@ -1,4 +1,4 @@
-package gormbulk
+package gormcreatewoi
 
 import (
 	"database/sql"
@@ -94,20 +94,13 @@ func Test_insertObject(t *testing.T) {
 		"INSERT INTO `tables` \\(`ThisIsCamelCase`, `regular_column`\\)",
 	).WithArgs(
 		"first custom", "first regular",
-		"second custom", "second regular",
 	).WillReturnResult(
 		sqlmock.NewResult(1, 1),
 	)
 
-	err = insertObjSet(gdb, []interface{}{
-		Table{
-			RegularColumn: "first regular",
-			Custom:        "first custom",
-		},
-		Table{
-			RegularColumn: "second regular",
-			Custom:        "second custom",
-		},
+	err = insertObjSet(gdb, &Table{
+		RegularColumn: "first regular",
+		Custom:        "first custom",
 	})
 
 	require.NoError(t, err)
